@@ -3,6 +3,7 @@ package favorite
 import (
 	"context"
 	"database/sql"
+
 	"github.com/target/goalert/assignment"
 	"github.com/target/goalert/permission"
 	"github.com/target/goalert/util"
@@ -15,6 +16,10 @@ import (
 type Store interface {
 	// Set will set a target as a favorite for the given userID. It is safe to call multiple times.
 	Set(ctx context.Context, userID string, tgt assignment.Target) error
+
+	// SetTx will set a target as a favorite for the given userID. It is safe to call multiple times.
+	SetTx(ctx context.Context, tx *sql.Tx, userID string, tgt assignment.Target) error
+
 	// Unset will unset a target as a favorite for the given userID. It is safe to call multiple times.
 	Unset(ctx context.Context, userID string, tgt assignment.Target) error
 
@@ -57,6 +62,11 @@ func NewDB(ctx context.Context, db *sql.DB) (*DB, error) {
 
 // Set will store the target as a favorite of the given user. Must be authorized as System or the same user.
 func (db *DB) Set(ctx context.Context, userID string, tgt assignment.Target) error {
+	return db.SetTx(ctx, nil, userID, tgt)
+}
+
+// SetTx will store the target as a favorite of the given user. Must be authorized as System or the same user.
+func (db *DB) SetTx(ctx context.Context, tx *sql.Tx, userID string, tgt assignment.Target) error {
 	err := permission.LimitCheckAny(ctx, permission.System, permission.MatchUser(userID))
 	if err != nil {
 		return err

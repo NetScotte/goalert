@@ -5,103 +5,81 @@ const c = new Chance()
 testScreen('Favorites', testFavorites)
 
 function testFavorites(screen: ScreenFormat) {
-  describe('Rotation Favorites', () => {
-    let rot: Rotation
-    beforeEach(() => {
-      cy.createRotation()
-        .then(r => {
-          rot = r
-        })
-        .visit('/rotations')
+  check(
+    'Service',
+    'services',
+    (name: string, favorite: boolean) =>
+      cy.createService({ name, favorite }).then(s => s.id),
+    () =>
+      cy
+        .visit(`/alerts`)
+        .pageFab()
+        .get('input[name=service]'),
+  )
+}
+
+function check(
+  typeName: string,
+  urlPrefix: string,
+  createFunc: (name: string, fav: boolean) => Cypress.Chainable<string>,
+  getSearchSelectFunc?: () => Cypress.Chainable<JQuery<HTMLElement>>,
+) {
+  describe(typeName + ' Favorites', () => {
+    it('should allow setting and unsetting as a favorite from details page ', () => {
+      createFunc('', false).then(id => {
+        cy.visit(`/${urlPrefix}/${id}`)
+
+        // test setting as favorite
+        cy.get(`button[aria-label="Set as a Favorite ${typeName}"]`).click()
+        cy.reload()
+        // aria label should change and should be set as a favorite, test unsetting
+        cy.get(`button[aria-label="Unset as a Favorite ${typeName}"`).click()
+        cy.reload()
+        // check that unset
+        cy.get(`button[aria-label="Set as a Favorite ${typeName}"]`).click()
+      })
     })
+    it('should list favorites at the top', () => {
+      const prefix = c.word({ length: 12 })
+      const name1 = prefix + 'A'
+      const name2 = prefix + 'Z'
+      createFunc(name1, false)
+      createFunc(name2, true)
+      cy.visit(`/${urlPrefix}?search=${encodeURIComponent(prefix)}`)
 
-    it('should have favored rotations move to first on rotation list', () => {
-      cy.pageSearch(rot.name)
-      cy.get('#app')
-        .contains(rot.name)
-        .click()
-      cy.get('button[aria-label="Set as a Favorite Rotation"]')
-        .click()
-        .visit('/rotations')
-      cy.get('#app').contains(rot.name)
+      cy.get('ul[data-cy=apollo-list] li')
+        .should('have.length', 2)
+        .first()
+        .should('contain', name2)
+        .find('[data-cy=fav-icon]')
+        .should('exist')
+
+      cy.get('ul[data-cy=apollo-list] li')
+        .last()
+        .should('contain', name1)
     })
+    if (getSearchSelectFunc) {
+      it('should sort favorites-first in a search-select', () => {
+        const prefix = c.word({ length: 12 })
+        const name1 = prefix + 'A'
+        const name2 = prefix + 'Z'
+        createFunc(name1, false)
+        createFunc(name2, true)
 
-    it('should have favorites first in RotationSelect on escaltion policy steps', () => {
-      cy.pageSearch(rot.name)
-      cy.get('#app')
-        .contains(rot.name)
-        .click()
-      cy.get('button[aria-label="Set as a Favorite Rotation"]')
-        .click()
-        .visit('/escalation-policies')
+        getSearchSelectFunc()
+          .findByLabel(prefix)
+          .parent()
+          .children()
+          .should('have.length', 2)
+          .as('items')
 
-      cy.pageFab()
-
-      cy.get('div[role=dialog]').as('dialog')
-      cy.get('@dialog').should('contain', 'Create Escalation Policy')
-
-      const name = 'SM EP ' + c.word({ length: 8 })
-      const description = c.word({ length: 10 })
-      const repeat = c.integer({ min: 0, max: 5 }).toString()
-
-      cy.get('@dialog')
-        .find('input[name=name]')
-        .type(name)
-
-      cy.get('@dialog')
-        .find('textarea[name=description]')
-        .type(description)
-
-      cy.get('@dialog')
-        .find('input[name=repeat]')
-        .selectByLabel(repeat)
-
-      cy.get('@dialog')
-        .contains('button', 'Submit')
-        .click()
-
-      // should be on details page
-      cy.get('body')
-        .should('contain', name)
-        .should('contain', description)
-
-      cy.get('button[data-cy=page-fab]').click()
-
-      cy.get('[data-cy=search-select-input]').click()
-      cy.get('[data-cy=select-dropdown]').contains(rot.name)
-    })
-
-    it('should show favorites first in schedule assignment', () => {
-      cy.pageSearch(rot.name)
-      cy.get('#app')
-        .contains(rot.name)
-        .click()
-      cy.get('button[aria-label="Set as a Favorite Rotation"]')
-        .click()
-        .visit('/schedules')
-
-      const name = c.word({ length: 8 })
-      const description = c.sentence({ words: 5 })
-
-      cy.pageFab()
-      cy.get('input[name=name]').type(name)
-
-      cy.get('textarea[name=description]')
-        .clear()
-        .type(description)
-      cy.get('button')
-        .contains('Submit')
-        .click()
-
-      cy.get('a[role=button]')
-        .eq(0)
-        .click()
-
-      cy.pageFab('Rotation')
-      cy.get('input[name=targetID]')
-
-      cy.get('[data-cy=search-select-input]').click()
-      cy.get('[data-cy=select-dropdown]').contains(rot.name)
-    })
+        cy.get('@items')
+          .first()
+          .should('contain', name2)
+        cy.get('@items')
+          .last()
+          .should('contain', name1)
+      })
+    }
   })
 }
